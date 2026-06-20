@@ -34,4 +34,4 @@ __author__ = """2009, 2010 Thomas Jost <thomas.jost@gmail.com>
 """
 
 __all__ = ['app', 'builder', 'config', 'document', 'editable_label', 'extras', 'media_overlays', 'pointer', 'scribble',
-           'surfacecache', 'talk_time', 'ui', 'util']
+           'speaker_notes', 'surfacecache', 'talk_time', 'ui', 'util']

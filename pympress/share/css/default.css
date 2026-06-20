@@ -99,3 +99,29 @@
 .grid-frame > *:hover {
   border-color: @theme_selected_bg_color;
 }
+
+/* Editable speaker-notes panel (TeXSlide) */
+.speaker-notes,
+.speaker-notes text {
+  font-size: 1.3em;
+}
+
+/* Presentation mode: read-only, light blue */
+.speaker-notes-present text {
+  background-color: #e7f1fb;
+  color: #16314c;
+}
+
+/* Rehearsal mode: editable, light green */
+.speaker-notes-rehearse text {
+  background-color: #e8f7ec;
+  color: #143821;
+}
+
+/* Warning shown when the deck changed under the saved notes */
+.speaker-notes-warning {
+  background-color: #fbe9e7;
+  color: #8a2018;
+  border-radius: 3px;
+  padding: 3px 6px;
+}

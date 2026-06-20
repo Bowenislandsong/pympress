@@ -48,7 +48,8 @@ from gi.repository import GObject, Gtk, Gdk, GLib, GdkPixbuf, Gio
 
 
 from pympress import (
-    document, surfacecache, util, pointer, scribble, deck, builder, talk_time, dialog, extras, editable_label
+    document, surfacecache, util, pointer, scribble, deck, builder, talk_time, dialog, extras, editable_label,
+    speaker_notes
 )
 
 
@@ -204,6 +205,7 @@ class UI(builder.Builder):
         self.show_annotations = self.config.getboolean('presenter', 'show_annotations')
         self.chosen_notes_mode = document.PdfPage[self.config.get('notes position', 'horizontal').upper()]
         self.show_bigbuttons = self.config.getboolean('presenter', 'show_bigbuttons')
+        self.rehearsal_mode = self.config.getboolean('presenter', 'rehearsal_mode', fallback=False)
 
         # Surface cache
         self.cache = surfacecache.SurfaceCache(self.doc, self.config.getint('cache', 'maxpages'))
@@ -233,6 +235,7 @@ class UI(builder.Builder):
             'notes-pos':             dict(activate=self.change_notes_pos, parameter_type=str,
                                           state=self.chosen_notes_mode.name.lower()),
             'annotations':           dict(activate=self.switch_annotations, state=self.show_annotations),
+            'rehearsal-mode':        dict(activate=self.switch_rehearsal_mode, state=self.rehearsal_mode),
             'validate-input':        dict(activate=self.validate_current_input),
             'cancel-input':          dict(activate=self.cancel_current_input),
             'align-content':         dict(activate=self.adjust_frame_position),
@@ -263,6 +266,7 @@ class UI(builder.Builder):
         self.scribbler = scribble.Scribbler(self.config, self, self.notes_mode)
         self.deck = deck.Overview(self.config, self)
         self.annotations = extras.Annotations(self)
+        self.speaker_notes = speaker_notes.SpeakerNotes(self)
         self.medias = extras.Media(self, self.config)
         self.laser = pointer.Pointer(self.config, self)
         self.est_time = editable_label.EstimatedTalkTime(self)
@@ -280,6 +284,7 @@ class UI(builder.Builder):
         }
         self.placeable_widgets['highlight'] = self.scribbler.scribble_overlay
         self.placeable_widgets['deck'] = self.deck.deck_viewport
+        self.placeable_widgets['speaker_notes'] = self.speaker_notes.p_frame_speaker_notes
 
         # Initialize windows
         self.make_cwin()
@@ -307,6 +312,9 @@ class UI(builder.Builder):
         self.laser_button.set_visible(self.show_bigbuttons)
         self.highlight_button.set_visible(self.show_bigbuttons)
         self.p_frame_annot.set_visible(self.show_annotations)
+
+        # Apply the persisted Presentation/Rehearsal state to the speaker-notes panel
+        self.speaker_notes.set_editable(self.rehearsal_mode)
         self.laser.activate_pointermode()
 
         # Setup screens and show all windows
@@ -726,6 +734,7 @@ class UI(builder.Builder):
     def cleanup(self, *args):
         """ Save configuration and exit the main loop.
         """
+        self.speaker_notes.flush()
         self.scribbler.disable_scribbling()
         self.medias.hide_all()
 
@@ -743,11 +752,11 @@ class UI(builder.Builder):
         """
         about = Gtk.AboutDialog(transient_for = self.p_win)
         pympress = util.get_pympress_meta()
-        about.set_program_name('pympress')
+        about.set_program_name('TeXSlide')
         about.set_version(pympress['version'])
         about.set_copyright(_('Contributors:') + '\n' + pympress['contributors'])
-        about.set_comments(_('pympress is a little PDF reader written in Python ' +
-                             'using Poppler for PDF rendering and GTK for the GUI.\n') +
+        about.set_comments(_('TeXSlide is a presenter for LaTeX & PDF slides, built on pympress, '
+                             'written in Python using Poppler for PDF rendering and GTK for the GUI.\n') +
                            _('Some preferences are saved in ') + str(self.config.path_to_config()) + '\n' +
                            _('The log is written to ') + str(util.get_log_path()) + '\n\n' +
                            _('Media support uses {}.').format(self.medias.backend_version) + '\n' +
@@ -826,6 +835,7 @@ class UI(builder.Builder):
         self.autoplay.set_doc_pages(self.doc.pages_number())
         self.medias.purge_media_overlays()
         self.timing.set_document_metadata(self.doc.get_structure().copy(), self.doc.page_labels[:])
+        self.speaker_notes.load_notes(self.doc)
 
         # A new document, restart at time 0, paused
         if not reloading:
@@ -1225,6 +1235,7 @@ class UI(builder.Builder):
             da.queue_draw()
 
         self.annotations.load_annotations(page_preview)
+        self.speaker_notes.show_page(self.preview_page)
 
         # Update display -- needs to be different ?
         self.page_number.update_page_numbers(self.preview_page, page_preview.label())
@@ -1886,6 +1897,35 @@ class UI(builder.Builder):
         gaction.change_state(GLib.Variant.new_boolean(self.show_annotations))
 
         return True
+
+
+    def switch_rehearsal_mode(self, gaction, target=None):
+        """ Toggle between Presentation (read-only notes) and Rehearsal (editable notes).
+
+        In Rehearsal mode the speaker-notes panel becomes editable and turns green; in
+        Presentation mode it is read-only and turns light blue. The choice is persisted.
+
+        Args:
+            gaction (:class:`~Gio.Action`): the action triggering the call
+            target (:class:`~GLib.Variant`): the parameter as a variant, or None
+
+        Returns:
+            `bool`: whether Rehearsal mode is now enabled.
+        """
+        self.rehearsal_mode = not self.rehearsal_mode
+        self.speaker_notes.set_editable(self.rehearsal_mode)
+        self.config.set('presenter', 'rehearsal_mode', 'on' if self.rehearsal_mode else 'off')
+
+        if self.rehearsal_mode:
+            # Let the user start typing immediately.
+            self.speaker_notes.speaker_notes_view.grab_focus()
+        else:
+            # Drop focus so navigation keys work again, and persist any pending edits.
+            self.p_win.set_focus(None)
+            self.speaker_notes.flush()
+
+        gaction.change_state(GLib.Variant.new_boolean(self.rehearsal_mode))
+        return self.rehearsal_mode
 
 
     def switch_bigbuttons(self, *args):

@@ -52,13 +52,19 @@ class Config(configparser.ConfigParser, object):  # python 2 fix
     #: `dict` of strings that are the valid representations of widgets from the presenter window
     #: that can be dynamically rearranged, mapping to their names
     placeable_widgets = {"notes": "p_frame_notes", "current": "p_frame_cur", "next": "grid_next",
-                         "annotations": "p_frame_annot", "highlight": "scribble_overlay"}
+                         "annotations": "p_frame_annot", "highlight": "scribble_overlay",
+                         "speaker_notes": "p_frame_speaker_notes"}
 
-    #: `dict` mapping layout ids to tuples of their expected and optional widgets
+    #: `dict` mapping layout ids to tuples of their expected and optional widgets.
+    #: "speaker_notes" is always optional so that pre-existing user layouts (which never mention it)
+    #: stay valid, while the shipped default layouts may include it.
     widget_reqs = {
-        'notes':      (set(placeable_widgets.keys()) - {"annotations", "highlight"}, {"annotations"}),
-        'plain':      (set(placeable_widgets.keys()) - {"notes", "highlight"},),
-        'note_pages': (set(placeable_widgets.keys()) - {"current", "highlight"},),
+        'notes':      (set(placeable_widgets.keys()) - {"annotations", "highlight", "speaker_notes"},
+                       {"annotations", "speaker_notes"}),
+        'plain':      (set(placeable_widgets.keys()) - {"notes", "highlight", "speaker_notes"},
+                       {"speaker_notes"}),
+        'note_pages': (set(placeable_widgets.keys()) - {"current", "highlight", "speaker_notes"},
+                       {"speaker_notes"}),
         'highlight':  ({"highlight"}, set(placeable_widgets.keys()) - {"highlight"}),
         'highlight_notes':  ({"highlight"}, set(placeable_widgets.keys()) - {"highlight"}),
     }

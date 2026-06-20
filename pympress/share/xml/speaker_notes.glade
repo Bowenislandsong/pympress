@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TeXSlide: editable speaker-notes panel (placeable widget) -->
+<interface>
+  <requires lib="gtk+" version="3.4"/>
+  <object class="GtkFrame" id="p_frame_speaker_notes">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <property name="hexpand">True</property>
+    <property name="vexpand">True</property>
+    <property name="label-xalign">0</property>
+    <property name="shadow-type">in</property>
+    <child>
+      <object class="GtkBox" id="speaker_notes_vbox">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkLabel" id="speaker_notes_warning">
+            <property name="visible">False</property>
+            <property name="no-show-all">True</property>
+            <property name="can-focus">False</property>
+            <property name="wrap">True</property>
+            <property name="xalign">0</property>
+            <property name="margin-start">8</property>
+            <property name="margin-end">8</property>
+            <property name="margin-top">5</property>
+            <property name="margin-bottom">5</property>
+            <property name="label" translatable="yes">⚠ The slides changed since these notes were written — a note may now be on the wrong slide. Please review.</property>
+            <style>
+              <class name="speaker-notes-warning"/>
+            </style>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkScrolledWindow" id="speaker_notes_scroll">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
+            <property name="shadow-type">none</property>
+            <child>
+              <object class="GtkTextView" id="speaker_notes_view">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="hexpand">True</property>
+                <property name="vexpand">True</property>
+                <property name="wrap-mode">word</property>
+                <property name="left-margin">12</property>
+                <property name="right-margin">12</property>
+                <property name="top-margin">10</property>
+                <property name="bottom-margin">10</property>
+                <property name="editable">False</property>
+                <property name="cursor-visible">False</property>
+                <style>
+                  <class name="speaker-notes"/>
+                  <class name="speaker-notes-present"/>
+                </style>
+              </object>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+    <child type="label">
+      <object class="GtkLabel" id="speaker_notes_label">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Speaker notes</property>
+        <property name="use-markup">True</property>
+        <style>
+          <class name="frame-label"/>
+        </style>
+      </object>
+    </child>
+  </object>
+</interface>

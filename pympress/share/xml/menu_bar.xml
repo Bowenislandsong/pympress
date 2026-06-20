@@ -71,6 +71,10 @@
 			<attribute name="action">app.annotations</attribute>
 		</item>
 		<item>
+			<attribute name="label" translatable="yes">_Rehearsal mode (edit notes)</attribute>
+			<attribute name="action">app.rehearsal-mode</attribute>
+		</item>
+		<item>
 			<attribute name="label" translatable="yes">Big buttons</attribute>
 			<attribute name="action">app.big-buttons</attribute>
 		</item>

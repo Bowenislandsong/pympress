@@ -100,7 +100,7 @@ class Pympress(Gtk.Application):
 
 
     def __init__(self):
-        GLib.set_application_name('pympress')
+        GLib.set_application_name('TeXSlide')
         # GLib.set_prgname('pympress')  # Let prgname be auto-determined from sys.argv[0]
         Gtk.Application.__init__(self, application_id='io.github.pympress',
                                  flags=Gio.ApplicationFlags.HANDLES_OPEN | Gio.ApplicationFlags.CAN_OVERRIDE_APP_ID)
@@ -141,9 +141,13 @@ class Pympress(Gtk.Application):
         """
         self.config = config.Config()
 
-        # prefer X11 on posix systems because Wayland still has some shortcomings for us,
-        # specifically libVLC and the ability to disable screensavers
-        if util.IS_POSIX:
+        # prefer X11 on Linux because Wayland still has some shortcomings for us,
+        # specifically libVLC and the ability to disable screensavers. On macOS use the
+        # native quartz backend: XQuartz is rarely installed (and not needed), and forcing
+        # x11 first would abort on a clean Mac.
+        if util.IS_MAC_OS:
+            Gdk.set_allowed_backends('quartz,*')
+        elif util.IS_POSIX:
             Gdk.set_allowed_backends('x11,*')
 
         logger.info(self.version_string)
