@@ -197,6 +197,19 @@ fi
 chmod +x "$MACOS/$APP_NAME"
 
 touch "$APP"
+
+# Ad-hoc sign the whole bundle. This does NOT notarize it, but it means a downloaded copy
+# shows the bypassable "unidentified developer" prompt (right-click -> Open) instead of the
+# un-bypassable "TeXSlide is damaged" error that unsigned+quarantined apps get.
+if command -v codesign >/dev/null 2>&1; then
+    echo "==> Ad-hoc signing the bundle (can take a minute)"
+    if codesign --force --deep --sign - "$APP" >/dev/null 2>&1; then
+        echo "    signed (ad-hoc)"
+    else
+        echo "!! codesign failed — continuing (local install still works; downloads may warn 'damaged')" >&2
+    fi
+fi
+
 echo "==> Done: $APP"
 
 # --- optional DMG ----------------------------------------------------------------------
