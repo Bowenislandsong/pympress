@@ -762,13 +762,18 @@ class Document(object):
         self.doc = pop_doc
         self.changes = False
 
+        self.path = None
         if uri is not None:
             uri_parts = urlsplit(uri, scheme='file')
-            self.path = pathlib.Path(url2pathname(uri_parts.path))
-            if uri_parts.scheme == 'file':
-                self.path = pathlib.Path.cwd().joinpath(self.path.name)
-        else:
-            self.path = None
+            if uri_parts.scheme in ('', 'file'):
+                try:
+                    self.path = pathlib.Path(url2pathname(uri_parts.path))
+                    if not self.path.is_absolute():
+                        self.path = pathlib.Path.cwd().joinpath(self.path)
+                    self.path = self.path.resolve()
+                except Exception:
+                    logger.exception('Could not derive local path for document {}'.format(uri))
+                    self.path = None
 
         # Pages numbers and labels
         self.nb_pages = 0 if pop_doc is None else self.doc.get_n_pages()

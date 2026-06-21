@@ -28,6 +28,7 @@ import logging
 import os
 import sys
 import locale
+import platform
 
 from pympress import util
 
@@ -35,7 +36,63 @@ from pympress import util
 # Setup logging, and catch all uncaught exceptions in the log file.
 # Load pympress.util early (OS and path-specific things) to load and setup gettext translation asap.
 logger = logging.getLogger(__name__)
-logging.basicConfig(filename=util.get_log_path(), level=logging.DEBUG)
+
+
+def setup_logging():
+    """Configure logging, falling back to stderr if the log file is unavailable."""
+    try:
+        logging.basicConfig(filename=util.get_log_path(), level=logging.DEBUG)
+    except OSError as err:
+        logging.basicConfig(level=logging.WARNING)
+        logger.warning('Failed to open pympress log file: %s', err)
+
+
+setup_logging()
+
+
+def print_version():
+    """Print version info without importing Gtk/Gdk, which may require a GUI session."""
+    details = [
+        'Pympress:', util.get_pympress_meta()['version'],
+        '; Python:', platform.python_version(),
+        '; OS:', platform.system(), platform.release(), platform.version(),
+    ]
+
+    try:
+        import gi
+        gi.require_version('Poppler', '0.18')
+        from gi.repository import GLib, Poppler
+        details.extend([
+            '; GLib {}.{}.{}'.format(GLib.MAJOR_VERSION, GLib.MINOR_VERSION, GLib.MICRO_VERSION),
+            '; Poppler', Poppler.get_version(), Poppler.get_backend().value_nick,
+        ])
+    except Exception as err:
+        logger.debug('Failed to load Poppler version info', exc_info=True)
+        details.extend(['; Poppler:', 'unavailable ({})'.format(err)])
+
+    try:
+        import cairo
+        details.extend(['; Cairo', cairo.cairo_version_string(), ', pycairo', cairo.version])
+    except Exception as err:
+        logger.debug('Failed to load Cairo version info', exc_info=True)
+        details.extend(['; Cairo:', 'unavailable ({})'.format(err)])
+
+    print(' '.join(details))
+
+
+def _wants_version(argv):
+    """ True if -v/--version is requested before any positional (e.g. a PDF path) argument. """
+    for arg in argv:
+        if arg in ('--version', '-v'):
+            return True
+        if not arg.startswith('-'):
+            break
+    return False
+
+
+if _wants_version(sys.argv[1:]):
+    print_version()
+    exit(0)
 
 
 def uncaught_handler(*exc_info):

@@ -205,7 +205,10 @@ class UI(builder.Builder):
         self.show_annotations = self.config.getboolean('presenter', 'show_annotations')
         self.chosen_notes_mode = document.PdfPage[self.config.get('notes position', 'horizontal').upper()]
         self.show_bigbuttons = self.config.getboolean('presenter', 'show_bigbuttons')
-        self.rehearsal_mode = self.config.getboolean('presenter', 'rehearsal_mode', fallback=False)
+        # Always boot in Presentation mode (safe, read-only). Rehearsal is a per-session editing
+        # toggle, never a state to resume into right before a talk: booting read-only guarantees
+        # full keyboard and clicker navigation at startup regardless of how the last session ended.
+        self.rehearsal_mode = False
 
         # Surface cache
         self.cache = surfacecache.SurfaceCache(self.doc, self.config.getint('cache', 'maxpages'))
@@ -249,6 +252,7 @@ class UI(builder.Builder):
             'save-file':         dict(activate=self.save_file),
             'save-file-as':      dict(activate=self.save_file_as),
             'pick-file':         dict(activate=self.pick_file),
+            'reload-file':       dict(activate=self.reload_file),
             'list-recent-files': dict(change_state=self.populate_recent_menu, state=False),
             'page':              dict(activate=lambda gaction, param: self.goto_page(param.get_int64()),
                                       parameter_type=int, state=self.current_page),
@@ -296,6 +300,13 @@ class UI(builder.Builder):
             if action == 'highlight-hold-to-erase':
                 continue  # Not really an action but we define a shortcut for it
             self.app.set_accels_for_action('app.' + action, shortcut_list)
+
+        # Suspend app-wide accelerators *only* while the editable notes box actually holds keyboard
+        # focus, so note text (e.g. "start") can't trigger presentation actions — while leaving slide
+        # navigation, fullscreen and the clicker working at every other moment, including at startup.
+        notes_view = self.speaker_notes.speaker_notes_view
+        notes_view.connect('focus-in-event', self.on_notes_focus_changed, True)
+        notes_view.connect('focus-out-event', self.on_notes_focus_changed, False)
 
         # Common to both windows
         self.load_icons()
@@ -856,6 +867,17 @@ class UI(builder.Builder):
         """ Reload the current document.
         """
         self.swap_document(self.doc.get_uri(), page=self.current_page, reloading=True)
+
+
+    def reload_file(self, *args):
+        """ Manually reload the open document from disk, e.g. after recompiling the PDF.
+
+        On macOS the automatic file watcher is disabled, so this gives authors an in-app way
+        (Ctrl+R / File ▸ Reload) to refresh the slides after rebuilding the deck. Does nothing
+        when no real document is open.
+        """
+        if self.doc is not None and self.doc.get_uri():
+            self.reload_document()
 
 
     def populate_recent_menu(self, gaction, is_opening=None):
@@ -1926,6 +1948,31 @@ class UI(builder.Builder):
 
         gaction.change_state(GLib.Variant.new_boolean(self.rehearsal_mode))
         return self.rehearsal_mode
+
+    def set_notes_editing_accels(self, editing):
+        """ Disable app-wide keyboard shortcuts while speaker notes are being edited.
+
+        Gtk application accelerators are global to the window. Without suspending them,
+        ordinary note text such as "start" can trigger presentation actions like swap
+        screens or edit talk time before the TextView sees every character.
+        """
+        for action, shortcut_list in self.config.shortcuts.items():
+            if action == 'highlight-hold-to-erase':
+                continue
+            accels = shortcut_list if not editing or action == 'rehearsal-mode' else []
+            self.app.set_accels_for_action('app.' + action, accels)
+
+
+    def on_notes_focus_changed(self, widget, event, focused):
+        """ Suspend app accelerators while the editable notes box has focus, restore them when it loses focus.
+
+        Args:
+            widget (:class:`~Gtk.Widget`): the speaker-notes text view
+            event (:class:`~Gdk.EventFocus`): the focus event
+            focused (`bool`): `True` on focus-in (about to type), `False` on focus-out
+        """
+        self.set_notes_editing_accels(focused)
+        return False
 
 
     def switch_bigbuttons(self, *args):

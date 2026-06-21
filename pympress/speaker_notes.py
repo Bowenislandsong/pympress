@@ -80,6 +80,8 @@ class SpeakerNotes(builder.Builder):
         self.dirty = False
         #: `bool` whether the deck changed since the notes were written.
         self.shifted = False
+        #: `bool` whether the last attempt to write the notes sidecar failed (e.g. read-only folder).
+        self.save_error = False
         #: `bool` whether the panel is currently editable (Rehearsal mode).
         self.editable = False
 
@@ -129,6 +131,7 @@ class SpeakerNotes(builder.Builder):
         self.path = None
         self.fingerprint = None
         self.shifted = False
+        self.save_error = False
         self.current_page = None
 
         path = getattr(doc, 'path', None)
@@ -136,6 +139,7 @@ class SpeakerNotes(builder.Builder):
 
         if path is not None:
             try:
+                path = path.resolve()
                 self.path = path.parent.joinpath(path.stem + '.notes.json')
             except Exception:
                 logger.exception('Could not derive speaker-notes path for document')
@@ -258,6 +262,9 @@ class SpeakerNotes(builder.Builder):
                 json.dump(data, f, ensure_ascii=False, indent=1, sort_keys=True)
             os.replace(str(tmp), str(self.path))
             self.dirty = False
+            if self.save_error:
+                self.save_error = False
+                self._update_warning()
         except Exception:
             logger.exception('Could not save speaker notes to {}'.format(self.path))
             try:
@@ -265,6 +272,10 @@ class SpeakerNotes(builder.Builder):
                     tmp.unlink()
             except Exception:
                 pass
+            # Surface the failure: notes stay in memory but the user must know they aren't on disk.
+            if not self.save_error:
+                self.save_error = True
+                self._update_warning()
 
     def flush(self):
         """ Cancel any pending debounced save and write immediately if there are edits.
@@ -276,7 +287,19 @@ class SpeakerNotes(builder.Builder):
             self.save_notes()
 
     def _update_warning(self):
-        """ Show or hide the "deck changed" warning banner.
+        """ Show or hide the warning banner (notes could not be saved, or the deck shifted).
         """
-        if self.speaker_notes_warning is not None:
-            self.speaker_notes_warning.set_visible(self.shifted)
+        if self.speaker_notes_warning is None:
+            return
+        if self.save_error:
+            self.speaker_notes_warning.set_text(_(
+                '⚠ These notes could not be saved — the PDF’s folder may be read-only. '
+                'Move the PDF to a writable location (e.g. Documents) to keep your notes.'))
+            self.speaker_notes_warning.set_visible(True)
+        elif self.shifted:
+            self.speaker_notes_warning.set_text(_(
+                '⚠ The slides changed since these notes were written — a note may now be '
+                'on the wrong slide. Please review.'))
+            self.speaker_notes_warning.set_visible(True)
+        else:
+            self.speaker_notes_warning.set_visible(False)

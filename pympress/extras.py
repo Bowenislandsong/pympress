@@ -723,6 +723,10 @@ class FileWatcher(object):
     callback = lambda: None
 
     def __init__(self):
+        if util.IS_MAC_OS:
+            logger.info(_('Monitoring of changes to reload files automatically is disabled on macOS'))
+            return
+
         try:
             from watchdog.observers import Observer
             from watchdog.events import FileSystemEventHandler
@@ -741,7 +745,7 @@ class FileWatcher(object):
         """ On finalize, cancel the watchdog observer thread.
         """
         self.stop_watching()
-        if self.observer.is_alive():
+        if self.observer is not None and self.observer.is_alive():
             self.observer.stop()
 
         self.observer = None
@@ -778,7 +782,8 @@ class FileWatcher(object):
     def stop_watching(self):
         """ Remove all files that are being watched.
         """
-        self.observer.unschedule_all()
+        if self.observer is not None:
+            self.observer.unschedule_all()
 
 
     def _enqueue(self, event):

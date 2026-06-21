@@ -352,6 +352,8 @@ class ScreenArea(object):
         Returns:
             `ScreenArea`: The best candidate screen area, i.e. that has the largest intersection
         """
+        if not candidates:
+            raise NoMonitorPositions()
         areas = []
         for geom in candidates:
             intersection = geom.intersection(self)
@@ -497,6 +499,12 @@ class Monitor(ScreenArea):
         # Remove monitors whose area is entirely contained in that of another monitor. NB: union() computes intersection
         all_geom = [rect for n, rect in enumerate(all_geom)
                     if all(not other.contains(rect) for other in all_geom[:n] + all_geom[n + 1:])]
+
+        # No usable monitors (display asleep, mid projector hot-plug, screen locked, or a headless
+        # launch context): bail out cleanly instead of crashing on an empty geometry list. The
+        # caller (UI.setup_screens) catches this and simply skips monitor-based window placement.
+        if not all_geom:
+            raise NoMonitorPositions()
 
         # We have a global positioning system
         if any(win.get_position() != (0, 0) for win in windows):

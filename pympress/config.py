@@ -191,6 +191,8 @@ class Config(configparser.ConfigParser, object):  # python 2 fix
     def upgrade(self):
         """ Update obsolete config options when pympress updates.
         """
+        default_layouts = dict(self.layout)
+
         if self.get('presenter', 'pointer') == 'pointer_none':
             self.set('presenter', 'pointer', 'red')
             self.set('presenter', 'pointer_mode', 'disabled')
@@ -269,6 +271,32 @@ class Config(configparser.ConfigParser, object):  # python 2 fix
                     self.set('shortcuts', new, shortcut)
 
                 self.remove_option('shortcuts', old)
+
+        def contains_widget(layout, widget):
+            next_visits = deque([layout])
+            while next_visits:
+                node = next_visits.popleft()
+                if node == widget:
+                    return True
+                if isinstance(node, dict):
+                    next_visits.extend(node.get('children', []))
+            return False
+
+        # One-time migration: add the speaker-notes panel to layouts saved by a pre-notes build.
+        # Gated by a flag so it runs exactly once — a user who later removes the panel on purpose
+        # keeps it removed, and unrelated layout customizations are never clobbered on every launch.
+        if not self.getboolean('presenter', 'speaker_notes_injected', fallback=False):
+            for layout_name in ('plain', 'note_pages'):
+                try:
+                    layout = json.loads(self.get('layout', layout_name))
+                except Exception:
+                    continue
+
+                if not contains_widget(layout, 'speaker_notes') and layout_name in default_layouts:
+                    logger.info('Adding speaker notes panel to layout "{}" (one-time)'.format(layout_name))
+                    self.set('layout', layout_name, json.dumps(default_layouts[layout_name], indent=4))
+
+            self.set('presenter', 'speaker_notes_injected', 'on')
 
 
     def getlist(self, *args):

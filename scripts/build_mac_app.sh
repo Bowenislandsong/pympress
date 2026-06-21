@@ -44,10 +44,10 @@ echo "==> Building $APP_NAME.app  (mode: $MODE, version: $VERSION)"
 ENV_PREFIX="${TEXSLIDE_ENV:-}"
 if [ -z "$ENV_PREFIX" ]; then
     for cand in "$HOME/miniconda3/envs/texslide" "$HOME/anaconda3/envs/texslide" "${CONDA_PREFIX:-}"; do
-        if [ -n "$cand" ] && [ -x "$cand/bin/python" ] && [ -d "$cand/lib/girepository-1.0" ]; then ENV_PREFIX="$cand"; break; fi
+        if [ -n "$cand" ] && { [ -x "$cand/bin/python" ] || [ -x "$cand/bin/python3" ]; } && [ -d "$cand/lib/girepository-1.0" ]; then ENV_PREFIX="$cand"; break; fi
     done
 fi
-if [ -z "$ENV_PREFIX" ] || [ ! -x "$ENV_PREFIX/bin/python" ]; then
+if [ -z "$ENV_PREFIX" ] || { [ ! -x "$ENV_PREFIX/bin/python" ] && [ ! -x "$ENV_PREFIX/bin/python3" ]; }; then
     echo "!! Could not find the 'texslide' conda env. Set TEXSLIDE_ENV=/path/to/env and retry." >&2
     exit 1
 fi
@@ -68,7 +68,9 @@ if command -v rsvg-convert >/dev/null 2>&1 && [ -f "$ICON_SVG" ]; then
         px="${spec%%:*}"; name="${spec##*:}"
         rsvg-convert -w "$px" -h "$px" "$ICON_SVG" -o "$ICONSET/icon_${name}.png"
     done
-    iconutil -c icns "$ICONSET" -o "$RES/$APP_NAME.icns"
+    if ! iconutil -c icns "$ICONSET" -o "$RES/$APP_NAME.icns"; then
+        echo "!! iconutil failed — continuing without a custom app icon" >&2
+    fi
     rm -rf "$(dirname "$ICONSET")"
 else
     echo "    (rsvg-convert or icon SVG missing — skipping icon)"
@@ -97,6 +99,9 @@ cat > "$CONTENTS/Info.plist" <<PLIST
         <dict>
             <key>CFBundleTypeName</key>     <string>PDF document</string>
             <key>CFBundleTypeRole</key>     <string>Viewer</string>
+            <key>CFBundleTypeExtensions</key><array><string>pdf</string></array>
+            <key>CFBundleTypeMIMETypes</key> <array><string>application/pdf</string></array>
+            <key>LSHandlerRank</key>         <string>Alternate</string>
             <key>LSItemContentTypes</key>   <array><string>com.adobe.pdf</string></array>
         </dict>
     </array>
@@ -134,10 +139,18 @@ REPO_LOCAL="$REPO"
 LAUNCHHEAD
 cat >> "$MACOS/run.sh" <<'LAUNCHBODY'
 APPDIR="$(cd "$(dirname "$0")/.." && pwd)"   # .../TeXSlide.app/Contents
-LOG="$HOME/Library/Logs/TeXSlide-launch.log"
-mkdir -p "$(dirname "$LOG")"
-exec >> "$LOG" 2>&1
+LOG_DIR="$HOME/Library/Logs"
+mkdir -p "$LOG_DIR" 2>/dev/null || LOG_DIR="${TMPDIR:-/tmp}"
+LOG="$LOG_DIR/TeXSlide-launch.log"
+if touch "$LOG" 2>/dev/null; then
+    exec >> "$LOG" 2>&1
+else
+    exec >/dev/null 2>&1
+fi
 echo "---- $(date) launching TeXSlide (mode=$MODE) ----"
+printf 'args:'
+printf ' [%s]' "$@"
+printf '\n'
 
 if [ "$MODE" = "portable" ]; then
     ENVDIR="$APPDIR/Resources/env"
@@ -147,7 +160,9 @@ else
     SRCDIR="$REPO_LOCAL"
 fi
 
-if [ ! -x "$ENVDIR/bin/python" ]; then
+PYTHON="$ENVDIR/bin/python"
+[ -x "$PYTHON" ] || PYTHON="$ENVDIR/bin/python3"
+if [ ! -x "$PYTHON" ]; then
     osascript -e 'display alert "TeXSlide" message "The TeXSlide runtime was not found. Please reinstall the app."' || true
     exit 1
 fi
@@ -174,24 +189,37 @@ fi
 export PYTHONPATH="$SRCDIR:${PYTHONPATH:-}"
 
 echo "ENVDIR=$ENVDIR"
-echo "python: $("$ENVDIR/bin/python" --version 2>&1)"
-exec "$ENVDIR/bin/python" -m pympress "$@"
+echo "python: $("$PYTHON" --version 2>&1)"
+exec "$PYTHON" -m pympress "$@"
 LAUNCHBODY
 chmod +x "$MACOS/run.sh"
 
 # Compile the native launcher = the real .app executable (must be Mach-O, not a script).
+LAUNCHER_M="$REPO/packaging/launcher.m"
 LAUNCHER_C="$REPO/packaging/launcher.c"
-if [ -f "$LAUNCHER_C" ] && command -v clang >/dev/null 2>&1; then
+LAUNCHER_BUILT="no"
+if [ -f "$LAUNCHER_M" ] && command -v clang >/dev/null 2>&1; then
+    if clang -arch arm64 -arch x86_64 -O2 -framework Cocoa -o "$MACOS/$APP_NAME" "$LAUNCHER_M" 2>/dev/null; then
+        echo "    native launcher: universal (arm64+x86_64)"
+        LAUNCHER_BUILT="yes"
+    elif clang -arch arm64 -O2 -framework Cocoa -o "$MACOS/$APP_NAME" "$LAUNCHER_M" 2>/dev/null; then
+        echo "    native launcher: arm64"
+        LAUNCHER_BUILT="yes"
+    else
+        echo "!! clang failed to build the Cocoa launcher; trying C launcher" >&2
+    fi
+fi
+if [ "$LAUNCHER_BUILT" = "no" ] && [ -f "$LAUNCHER_C" ] && command -v clang >/dev/null 2>&1; then
     if clang -arch arm64 -arch x86_64 -O2 -o "$MACOS/$APP_NAME" "$LAUNCHER_C" 2>/dev/null; then
         echo "    native launcher: universal (arm64+x86_64)"
+        LAUNCHER_BUILT="yes"
     elif clang -arch arm64 -O2 -o "$MACOS/$APP_NAME" "$LAUNCHER_C" 2>/dev/null; then
         echo "    native launcher: arm64"
-    else
-        echo "!! clang failed to build the launcher; using script (may trigger Rosetta)" >&2
-        cp "$MACOS/run.sh" "$MACOS/$APP_NAME"
+        LAUNCHER_BUILT="yes"
     fi
-else
-    echo "!! no clang / launcher.c; using script executable (may trigger Rosetta)" >&2
+fi
+if [ "$LAUNCHER_BUILT" = "no" ]; then
+    echo "!! no native launcher built; using script executable (may trigger Rosetta)" >&2
     cp "$MACOS/run.sh" "$MACOS/$APP_NAME"
 fi
 chmod +x "$MACOS/$APP_NAME"
